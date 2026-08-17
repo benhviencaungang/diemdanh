@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Điểm Danh Thông Minh</title>
-    <!-- Fixed Tailwind CDN script tag -->
+    <link rel="icon" href="data:,">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -54,7 +55,7 @@
                 </div>
                 <h1 class="text-2xl font-bold text-gray-800">Điểm Danh</h1>
                 <p class="text-sm text-gray-500 mt-2">Vui lòng cấp quyền vị trí để hệ thống xác nhận bạn đang ở đúng khu
-                    vực!</p>
+                    vực.</p>
             </div>
 
             <div class="space-y-4">
@@ -345,12 +346,10 @@
         </div>
     </div>
 
-    <script type="module">
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/+esm'
-
+    <script>
         const SUPABASE_URL = 'https://iaertyouaworfyxohbta.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_sAJ8YrGO9LH7ugUMmHubhA_wJ4_FUwI';
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let systemSettings = {
             target_lat: 0,
@@ -462,7 +461,7 @@
         }
 
         async function fetchSettings() {
-            const { data, error } = await supabase.from('attendance_settings').select('*').eq('id', 1).maybeSingle();
+            const { data, error } = await db.from('attendance_settings').select('*').eq('id', 1).maybeSingle();
             if (data) {
                 systemSettings = data;
                 return true;
@@ -519,7 +518,7 @@
 
             // 2. Kiểm tra xem thiết bị này đã điểm danh chưa
             const myDeviceId = getDeviceId();
-            const { data: existingRecords, error: checkError } = await supabase
+            const { data: existingRecords, error: checkError } = await db
                 .from('attendance_records')
                 .select('id, name')
                 .eq('device_id', myDeviceId);
@@ -555,7 +554,7 @@
                         return;
                     }
 
-                    const { error } = await supabase.from('attendance_records').insert([{
+                    const { error } = await db.from('attendance_records').insert([{
                         name: name,
                         department: dept,
                         latitude: userLat,
@@ -636,7 +635,7 @@
             const newStatus = toggleActive.checked;
 
             // Upsert nhanh state mới
-            const { error } = await supabase.from('attendance_settings').upsert({
+            const { error } = await db.from('attendance_settings').upsert({
                 id: 1,
                 target_lat: parseFloat(inputLat.value) || 0,
                 target_lng: parseFloat(inputLng.value) || 0,
@@ -691,7 +690,7 @@
             const newRadius = parseInt(inputRadius.value);
             const newStatus = toggleActive.checked;
 
-            const { error } = await supabase.from('attendance_settings').upsert({
+            const { error } = await db.from('attendance_settings').upsert({
                 id: 1,
                 target_lat: newLat,
                 target_lng: newLng,
@@ -712,7 +711,7 @@
         async function loadRecords() {
             listBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><span class="loader border-t-blue-500"></span><br>Đang tải...</td></tr>';
 
-            const { data, error } = await supabase.from('attendance_records').select('*').order('created_at', { ascending: false });
+            const { data, error } = await db.from('attendance_records').select('*').order('created_at', { ascending: false });
 
             if (error) {
                 listBody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-red-500">Lỗi tải dữ liệu.</td></tr>';
@@ -735,29 +734,34 @@
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-gray-50 transition-colors';
                 tr.innerHTML = `
-                    <td class="px-4 py-3 whitespace-nowrap text-gray-500 text-sm">${timeStr}</td>
-                    <td class="px-4 py-3 font-semibold text-gray-900">${record.name}</td>
-                    <td class="px-4 py-3 text-gray-600">${record.department}</td>
-                    <td class="px-4 py-3 text-right">
-                        <span class="px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs font-medium border border-green-100">~${distance}m</span>
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                        <button onclick="window.deleteRecord(${record.id}, '${record.name}')" class="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition" title="Xóa người này">
-                            <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        </button>
-                    </td>
-                `;
+                <td class="px-4 py-3 whitespace-nowrap text-gray-500 text-sm">${timeStr}</td>
+                <td class="px-4 py-3 font-semibold text-gray-900">${record.name}</td>
+                <td class="px-4 py-3 text-gray-600">${record.department}</td>
+                <td class="px-4 py-3 text-right">
+                    <span class="px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs font-medium border border-green-100">~${distance}m</span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <button class="btn-delete-row text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded transition" title="Xóa người này">
+                        <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </td>
+            `;
+
+                const btnDelete = tr.querySelector('.btn-delete-row');
+                btnDelete.addEventListener('click', () => {
+                    window.deleteRecord(record.id, record.name);
+                });
+
                 listBody.appendChild(tr);
             });
         }
 
         btnRefresh.addEventListener('click', loadRecords);
 
-        // Xóa một dòng cụ thể (Gắn vào window để gọi từ onclick trong HTML string)
         window.deleteRecord = async function (id, name) {
             const confirmed = await showCustomConfirm(`Bạn có chắc muốn xóa dữ liệu điểm danh của ${name}? Sau khi xóa, thiết bị của người này có thể điểm danh lại.`);
             if (confirmed) {
-                const { error } = await supabase.from('attendance_records').delete().eq('id', id);
+                const { error } = await db.from('attendance_records').delete().eq('id', id);
                 if (error) {
                     showCustomAlert('Lỗi khi xóa: ' + error.message, 'Lỗi', true);
                 } else {
@@ -774,7 +778,7 @@
                 btnDeleteAll.innerHTML = '<span class="loader w-4 h-4 border-2 border-red-500 border-t-red-200"></span> Đang xóa...';
                 btnDeleteAll.disabled = true;
 
-                const { error } = await supabase.from('attendance_records').delete().not('id', 'is', null);
+                const { error } = await db.from('attendance_records').delete().not('id', 'is', null);
 
                 if (error) {
                     await showCustomAlert('Lỗi khi xóa dữ liệu: ' + error.message, 'Lỗi', true);
