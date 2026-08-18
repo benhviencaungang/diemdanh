@@ -41,6 +41,7 @@
 
 <body class="min-h-screen text-gray-800 relative">
 
+    <!-- STUDENT VIEW -->
     <main id="student-view" class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
             <div class="text-center mb-6">
@@ -81,6 +82,7 @@
         </div>
     </main>
 
+    <!-- ADMIN LOGIN BUTTON & MODAL -->
     <button id="btn-show-admin-login"
         class="fixed bottom-4 right-4 text-gray-400 hover:text-gray-700 transition focus:outline-none p-3 bg-white rounded-full shadow-lg opacity-60 hover:opacity-100"
         title="Khu vực Quản trị">
@@ -111,6 +113,7 @@
         </div>
     </div>
 
+    <!-- ADMIN VIEW -->
     <main id="admin-view" class="hidden min-h-screen bg-gray-100 p-4 md:p-8">
         <div class="max-w-6xl mx-auto space-y-6">
 
@@ -133,7 +136,7 @@
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Cột trái: Cài đặt & QR -->
+                <!-- Cột trái: Cài đặt, Điểm danh Admin & QR -->
                 <div class="col-span-1 space-y-6">
 
                     <!-- Cài đặt -->
@@ -203,6 +206,28 @@
                             Lưu cấu hình vị trí
                         </button>
                         <div id="admin-status" class="mt-3 text-sm text-center font-medium hidden p-2 rounded-lg"></div>
+                    </div>
+
+                    <!-- THÊM MỚI: ĐIỂM DANH THỦ CÔNG (ADMIN) -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                        <h2 class="text-lg font-bold mb-4 border-b pb-3 text-gray-800 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            Điểm danh thủ công
+                        </h2>
+                        <p class="text-xs text-gray-500 mb-4">Không cần định vị/thiết bị. Mỗi người chỉ được 1 lần.</p>
+                        <div class="space-y-3 mb-4">
+                            <input type="text" id="admin-add-name" placeholder="Họ và Tên..."
+                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <input type="text" id="admin-add-dept" placeholder="Khoa / Phòng ban..."
+                                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <button id="btn-admin-add"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg text-sm transition flex justify-center items-center gap-2 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            Thêm vào danh sách
+                        </button>
                     </div>
 
                     <!-- Mã QR -->
@@ -382,6 +407,11 @@
         const btnUpdateLocation = document.getElementById('btn-update-location');
         const btnSaveSettings = document.getElementById('btn-save-settings');
         const adminStatus = document.getElementById('admin-status');
+
+        // Khai báo cho phần Admin điểm danh thủ công
+        const btnAdminAdd = document.getElementById('btn-admin-add');
+        const inputAdminAddName = document.getElementById('admin-add-name');
+        const inputAdminAddDept = document.getElementById('admin-add-dept');
 
         const listBody = document.getElementById('attendance-list');
         const btnRefresh = document.getElementById('btn-refresh-list');
@@ -708,6 +738,55 @@
             btnSaveSettings.innerHTML = originalContent;
         });
 
+        // TÍNH NĂNG MỚI: ĐIỂM DANH THỦ CÔNG CỦA ADMIN
+        btnAdminAdd.addEventListener('click', async () => {
+            const name = inputAdminAddName.value.trim();
+            const dept = inputAdminAddDept.value.trim();
+
+            if (!name || !dept) {
+                await showCustomAlert('Vui lòng nhập Tên và Khoa/Phòng để thêm thủ công!', 'Lỗi nhập liệu', true);
+                return;
+            }
+
+            const originalText = btnAdminAdd.innerHTML;
+            btnAdminAdd.innerHTML = '<span class="loader w-4 h-4 border-2"></span> Đang thêm...';
+            btnAdminAdd.disabled = true;
+
+            // Kiểm tra "Chỉ được 1 lần" dựa vào Tên (Đã có trong DB chưa)
+            const { data: existing, error: checkError } = await db
+                .from('attendance_records')
+                .select('id')
+                .eq('name', name);
+
+            if (existing && existing.length > 0) {
+                await showCustomAlert(`Người có tên "${name}" đã được điểm danh trước đó!`, 'Lỗi trùng lặp', true);
+                btnAdminAdd.innerHTML = originalText;
+                btnAdminAdd.disabled = false;
+                return;
+            }
+
+            // Lưu vào CSDL (Bỏ qua định vị, bỏ qua kiểm tra localStorage của Admin)
+            const { error } = await db.from('attendance_records').insert([{
+                name: name,
+                department: dept,
+                latitude: systemSettings.target_lat, // Lấy luôn vĩ độ chuẩn -> sai số 0m
+                longitude: systemSettings.target_lng, // Lấy luôn kinh độ chuẩn -> sai số 0m
+                device_id: 'admin_added_' + Date.now() // Tạo ID ảo để không bị dính thiết bị của Admin
+            }]);
+
+            if (error) {
+                await showCustomAlert('Lỗi khi thêm: ' + error.message, 'Lỗi', true);
+            } else {
+                await showCustomAlert(`Đã thêm điểm danh thủ công cho "${name}" thành công!`, 'Thành công', false);
+                inputAdminAddName.value = '';
+                inputAdminAddDept.value = '';
+                loadRecords(); // Cập nhật lại danh sách ngay lập tức
+            }
+
+            btnAdminAdd.innerHTML = originalText;
+            btnAdminAdd.disabled = false;
+        });
+
         async function loadRecords() {
             listBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><span class="loader border-t-blue-500"></span><br>Đang tải...</td></tr>';
 
@@ -735,7 +814,7 @@
                 tr.className = 'hover:bg-gray-50 transition-colors';
                 tr.innerHTML = `
                 <td class="px-4 py-3 whitespace-nowrap text-gray-500 text-sm">${timeStr}</td>
-                <td class="px-4 py-3 font-semibold text-gray-900">${record.name}</td>
+                <td class="px-4 py-3 font-semibold text-gray-900">${record.name} ${record.device_id.startsWith('admin_added_') ? '<span class="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Admin thêm</span>' : ''}</td>
                 <td class="px-4 py-3 text-gray-600">${record.department}</td>
                 <td class="px-4 py-3 text-right">
                     <span class="px-2 py-1 bg-green-50 text-green-700 rounded-md text-xs font-medium border border-green-100">~${distance}m</span>
@@ -799,14 +878,15 @@
             }
 
             let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-            csvContent += "Thời gian,Họ và tên,Khoa/Phòng,Vĩ độ,Kinh độ\n";
+            csvContent += "Thời gian,Họ và tên,Khoa/Phòng,Vĩ độ,Kinh độ,Ghi chú\n";
 
             currentRecords.forEach(row => {
                 const date = new Date(row.created_at).toLocaleString('vi-VN').replace(/,/g, '');
                 const name = `"${row.name.replace(/"/g, '""')}"`;
                 const dept = `"${row.department.replace(/"/g, '""')}"`;
+                const note = row.device_id.startsWith('admin_added_') ? '"Admin thêm thủ công"' : '""';
 
-                csvContent += `${date},${name},${dept},${row.latitude},${row.longitude}\n`;
+                csvContent += `${date},${name},${dept},${row.latitude},${row.longitude},${note}\n`;
             });
 
             const encodedUri = encodeURI(csvContent);
